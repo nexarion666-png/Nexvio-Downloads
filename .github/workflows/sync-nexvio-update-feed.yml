@@ -15,7 +15,7 @@ permissions:
 
 jobs:
   sync-update-feed:
-    if: github.event.release.draft == false && github.event.release.prerelease == false
+    if: github.event_name == 'workflow_dispatch' || (github.event.release.draft == false && github.event.release.prerelease == false)
     runs-on: ubuntu-latest
     steps:
       - name: Update the Nexvio website feed
@@ -29,7 +29,7 @@ jobs:
               const response = await github.rest.repos.getReleaseByTag({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                tag: core.getInput('tag', { required: true })
+                tag: context.payload.inputs?.tag || context.payload.inputs?.tag_name
               });
               release = response.data;
             }
