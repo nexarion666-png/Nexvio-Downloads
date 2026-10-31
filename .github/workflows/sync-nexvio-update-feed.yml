@@ -22,7 +22,7 @@ jobs:
             const tag = release.tag_name;
             const version = tag.replace(/^[vV]/, '');
 
-            if (!/^\\d+\\.\\d+\\.\\d+$/.test(version)) {
+            if (!/^\d+\.\d+\.\d+$/.test(version)) {
               core.setFailed(`Unexpected Nexvio release tag: ${tag}`);
               return;
             }
@@ -66,7 +66,7 @@ jobs:
               repo,
               path,
               message: `Update Nexvio update feed to ${version}`,
-              content: Buffer.from(JSON.stringify(feed, null, 2) + '\\n').toString('base64'),
+              content: Buffer.from(JSON.stringify(feed, null, 2)).toString('base64'),
               branch: 'main',
               ...(sha ? { sha } : {})
             });
