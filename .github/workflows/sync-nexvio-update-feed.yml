@@ -3,6 +3,12 @@ name: Sync published APK release to Nexvio update feed
 on:
   release:
     types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing release tag to sync, for example V1.0.448'
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -18,7 +24,15 @@ jobs:
           MAIN_REPO_TOKEN: ${{ secrets.NEXVIO_MAIN_REPO_TOKEN }}
         with:
           script: |
-            const release = context.payload.release;
+            let release = context.payload.release;
+            if (context.eventName === 'workflow_dispatch') {
+              const response = await github.rest.repos.getReleaseByTag({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                tag: core.getInput('tag', { required: true })
+              });
+              release = response.data;
+            }
             const tag = release.tag_name;
             const version = tag.replace(/^[vV]/, '');
 
