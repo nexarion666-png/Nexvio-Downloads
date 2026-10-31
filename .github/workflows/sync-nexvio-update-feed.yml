@@ -54,13 +54,16 @@ jobs:
               return;
             }
 
-            const { getOctokit } = require('@actions/github');
-            const main = getOctokit(process.env.MAIN_REPO_TOKEN);
             const owner = 'nexarion666-png';
             const repo = 'Nexvio-';
             const path = 'updates-site/latest.json';
+            const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${path}`;
+            const headers = {
+              'Accept': 'application/vnd.github+json',
+              'Authorization': `Bearer ${process.env.MAIN_REPO_TOKEN}`,
+              'X-GitHub-Api-Version': '2022-11-28'
+            };
             const versionCode = Number(version.split('.').pop());
-
             const feed = {
               version,
               versionCode,
@@ -68,22 +71,26 @@ jobs:
               releaseNotes: (release.body || '').trim() || `Nexvio ${version} update.`
             };
 
+            const currentResponse = await fetch(`${apiUrl}?ref=main`, { headers });
             let sha;
-            try {
-              const current = await main.rest.repos.getContent({ owner, repo, path, ref: 'main' });
-              sha = current.data.sha;
-            } catch (error) {
-              if (error.status !== 404) throw error;
+            if (currentResponse.ok) {
+              const current = await currentResponse.json();
+              sha = current.sha;
+            } else if (currentResponse.status !== 404) {
+              throw new Error(`Could not read main website feed (${currentResponse.status}): ${await currentResponse.text()}`);
             }
 
-            await main.rest.repos.createOrUpdateFileContents({
-              owner,
-              repo,
-              path,
-              message: `Update Nexvio update feed to ${version}`,
-              content: Buffer.from(JSON.stringify(feed, null, 2)).toString('base64'),
-              branch: 'main',
-              ...(sha ? { sha } : {})
+            const updateResponse = await fetch(apiUrl, {
+              method: 'PUT',
+              headers: { ...headers, 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                message: `Update Nexvio update feed to ${version}`,
+                content: Buffer.from(JSON.stringify(feed, null, 2)).toString('base64'),
+                branch: 'main',
+                ...(sha ? { sha } : {})
+              })
             });
-
+            if (!updateResponse.ok) {
+              throw new Error(`Could not update main website feed (${updateResponse.status}): ${await updateResponse.text()}`);
+            }
             core.notice(`Update feed now points to Nexvio ${version}.`);
