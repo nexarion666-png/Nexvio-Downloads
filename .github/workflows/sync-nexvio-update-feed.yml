@@ -54,7 +54,8 @@ jobs:
               return;
             }
 
-            const main = github.getOctokit(process.env.MAIN_REPO_TOKEN);
+            const { getOctokit } = require('@actions/github');
+            const main = getOctokit(process.env.MAIN_REPO_TOKEN);
             const owner = 'nexarion666-png';
             const repo = 'Nexvio-';
             const path = 'updates-site/latest.json';
