@@ -1,0 +1,88 @@
+name: Sync published APK release to Nexvio update feed
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing release tag to sync, for example V1.0.448'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  sync-update-feed:
+    if: github.event.release.draft == false && github.event.release.prerelease == false
+    runs-on: ubuntu-latest
+    steps:
+      - name: Update the Nexvio website feed
+        uses: actions/github-script@v7
+        env:
+          MAIN_REPO_TOKEN: ${{ secrets.NEXVIO_MAIN_REPO_TOKEN }}
+        with:
+          script: |
+            let release = context.payload.release;
+            if (context.eventName === 'workflow_dispatch') {
+              const response = await github.rest.repos.getReleaseByTag({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                tag: core.getInput('tag', { required: true })
+              });
+              release = response.data;
+            }
+            const tag = release.tag_name;
+            const version = tag.replace(/^[vV]/, '');
+
+            if (!/^\d+\.\d+\.\d+$/.test(version)) {
+              core.setFailed(`Unexpected Nexvio release tag: ${tag}`);
+              return;
+            }
+
+            const apk = release.assets.find(asset => asset.name === 'app-debug.apk')
+              || release.assets.find(asset => asset.name.toLowerCase().endsWith('.apk'));
+
+            if (!apk) {
+              core.setFailed('No APK asset was attached to this release.');
+              return;
+            }
+
+            if (!process.env.MAIN_REPO_TOKEN) {
+              core.setFailed('Missing repository secret NEXVIO_MAIN_REPO_TOKEN.');
+              return;
+            }
+
+            const main = github.getOctokit(process.env.MAIN_REPO_TOKEN);
+            const owner = 'nexarion666-png';
+            const repo = 'Nexvio-';
+            const path = 'updates-site/latest.json';
+            const versionCode = Number(version.split('.').pop());
+
+            const feed = {
+              version,
+              versionCode,
+              downloadUrl: apk.browser_download_url,
+              releaseNotes: (release.body || '').trim() || `Nexvio ${version} update.`
+            };
+
+            let sha;
+            try {
+              const current = await main.rest.repos.getContent({ owner, repo, path, ref: 'main' });
+              sha = current.data.sha;
+            } catch (error) {
+              if (error.status !== 404) throw error;
+            }
+
+            await main.rest.repos.createOrUpdateFileContents({
+              owner,
+              repo,
+              path,
+              message: `Update Nexvio update feed to ${version}`,
+              content: Buffer.from(JSON.stringify(feed, null, 2)).toString('base64'),
+              branch: 'main',
+              ...(sha ? { sha } : {})
+            });
+
+            core.notice(`Update feed now points to Nexvio ${version}.`);
